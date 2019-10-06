@@ -1,68 +1,100 @@
 package com.example.firebaseauth.presenter;
 
-import android.app.Activity;
+import android.content.SharedPreferences;
 import android.text.TextUtils;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-
+import com.example.firebaseauth.AppConstants;
+import com.example.firebaseauth.BuildConfig;
+import com.example.firebaseauth.model.User;
+import com.example.firebaseauth.network.ApiClient;
+import com.example.firebaseauth.network.ApiInterface;
 import com.example.firebaseauth.view.LoginActivityView;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class LoginPresenter {
     private static final String TAG = LoginPresenter.class.getSimpleName();
 
     private LoginActivityView mView;
-    private FirebaseAuth mAuth;
+    private ApiInterface apiInterface;
 
     public LoginPresenter(LoginActivityView mView) {
         this.mView = mView;
-        this.mAuth = FirebaseAuth.getInstance();
+        this.apiInterface = ApiClient.getClient().create(ApiInterface.class);
     }
 
     public void signIn(String email, String password) {
         if (!validateData(email, password)) {
             return;
         }
-        mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener((Activity) mView, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
-                            Log.d(TAG, "signInWithEmail:success");
-                            mView.launchHomeScreen();
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            mView.displayErrorToast("Authentication failed. Try signing up first.");
-                        }
-                    }
-                });
+        User user = new User(email, password);
+        Call<User> signInCall = apiInterface.signIn(BuildConfig.ApiKey, user);
+        signInCall.enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                if (response.isSuccessful()) {
+                    // Sign in success, update UI with the signed-in user's information
+                    Log.d(TAG, "signInWithEmail:success");
+                    saveIdToken(response.body().idToken);
+                    mView.launchHomeScreen();
+                }
+                else {
+                    // If sign in fails, display a message to the user.
+                    Log.d(TAG, "signInWithEmail:failure" + response.errorBody());
+                    mView.displayErrorToast("Authentication failed. Try signing up first.");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                // If sign in fails, display a message to the user.
+                Log.w(TAG, "signInWithEmail:failure", t);
+                mView.displayErrorToast("Authentication failed. Try signing up first.");
+            }
+        });
+
     }
 
     public void signUp(String email, String password) {
         if (!validateData(email, password)) {
             return;
         }
-        mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener((Activity) mView, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
-                            Log.d(TAG, "createUserWithEmail:success");
-                            mView.launchHomeScreen();
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                            mView.displayErrorToast("Sign up failed");
-                        }
-                    }
-                });
+        User user = new User(email, password);
+        Call<User> signUpCall = apiInterface.signUp(BuildConfig.ApiKey, user);
+        signUpCall.enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                if (response.isSuccessful()) {
+                    // Sign up success, update UI with the signed-in user's information
+                    Log.d(TAG, "createUserWithEmail:success");
+                    saveIdToken(response.body().idToken);
+                    mView.launchHomeScreen();
+                }
+                else {
+                    // If sign up fails, display a message to the user.
+                    Log.d(TAG, "createUserWithEmail:failure" + response.errorBody());
+                    mView.displayErrorToast("Sign up failed");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                // If sign up fails, display a message to the user.
+                Log.w(TAG, "createUserWithEmail:failure", t);
+                mView.displayErrorToast("Sign up failed");
+            }
+        });
+    }
+
+    private void saveIdToken(String idToken) {
+        Log.d(TAG, "id TOKEN " + idToken);
+        SharedPreferences sharedPrefs = mView.getSharedPrefs();
+        SharedPreferences.Editor editor = sharedPrefs.edit();
+        editor.putString(AppConstants.USER_ID_TOKEN, idToken);
+        editor.apply();
     }
 
     private boolean validateData(String email, String password) {
